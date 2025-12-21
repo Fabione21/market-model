@@ -128,8 +128,13 @@ def main():
     start = start_dt.strftime("%Y-%m-%d")
     print(f"Start download from: {start}")
 
-    equity = load_equity_universe_1000()
-    print(f"Equity tickers: {len(equity)}")
+    equity = []
+    with open("config/equity_universe.txt", "r", encoding="utf-8") as f:
+        for line in f:
+            t = line.strip()
+            if t and not t.startswith("#"):
+                equity.append(t)
+    equity = equity[:1000]
 
     idx_long = fetch_adj_close_long(INDEX_TICKERS, start=start)
     append_to_month_files("indices", idx_long)
