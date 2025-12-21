@@ -21,7 +21,6 @@ def get_start_date(existing_df):
         # se non abbiamo dati, scarichiamo 10 anni di storico
         return (datetime.today() - timedelta(days=365 * 10)).strftime("%Y-%m-%d")
     last_date = existing_df["date"].max()
-    # ripartiamo dal giorno successivo all’ultimo già salvato
     return (last_date + pd.Timedelta(days=1)).strftime("%Y-%m-%d")
 
 def fetch_new_data(start_date):
@@ -30,19 +29,36 @@ def fetch_new_data(start_date):
         start=start_date,
         progress=False,
         auto_adjust=False,
-        group_by="column",
+        threads=True,
     )
 
     if df.empty:
         return pd.DataFrame(columns=["date", "ticker", "adj_close"])
 
-    # Se scarichi un solo ticker, Adj Close è una colonna semplice
-    adj = df[["Adj Close"]].reset_index()
-    adj.rename(columns={"Date": "date", "Adj Close": "adj_close"}, inplace=True)
-    adj["ticker"] = "^GSPC"
-    adj = adj[["date", "ticker", "adj_close"]]
+    # Estrai Adj Close in modo robusto
+    if "Adj Close" not in df.columns and isinstance(df.columns, pd.MultiIndex):
+        # In alcuni casi df ha MultiIndex (campo, ticker)
+        adj = df["Adj Close"]
+    else:
+        # Caso “normale”
+        adj = df["Adj Close"]
 
-    return adj.dropna(subset=["adj_close"])
+    # Se è una Series (1 ticker) -> DataFrame lungo
+    if isinstance(adj, pd.Series):
+        out = adj.reset_index()
+        out.columns = ["date", "adj_close"]
+        out["ticker"] = TICKERS[0]
+        out = out[["date", "ticker", "adj_close"]]
+        return out.dropna(subset=["adj_close"])
+
+    # Se è un DataFrame (più tickers) -> melt
+    out = adj.reset_index()
+    # La colonna data può chiamarsi Date
+    if "Date" in out.columns:
+        out = out.rename(columns={"Date": "date"})
+    out = out.melt(id_vars=["date"], var_name="ticker", value_name="adj_close")
+    out = out.dropna(subset=["adj_close"])
+    return out[["date", "ticker", "adj_close"]]
 
 def main():
     ensure_data_folder()
@@ -53,7 +69,7 @@ def main():
     new_data = fetch_new_data(start_date)
 
     if new_data.empty:
-        print("Nessun nuovo dato da aggiungere (probabilmente oggi non c’è ancora la chiusura).")
+        print("Nessun nuovo dato da aggiungere (oggi potrebbe non essere ancora disponibile).")
         return
 
     combined = pd.concat([existing, new_data], ignore_index=True)
