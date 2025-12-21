@@ -31,16 +31,19 @@ jobs:
         run: |
           python src/fetch_prices.py
 
-      - name: Commit updated data (if changed)
+      - name: Commit updated data (including new files)
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
 
-          if git diff --quiet; then
+          # Aggiunge TUTTI i cambiamenti, inclusi file nuovi
+          git add -A
+
+          # Se non c'è nulla da committare, esce senza errore
+          if git diff --cached --quiet; then
             echo "No changes to commit."
             exit 0
           fi
 
-          git add data/prices.csv
-          git commit -m "Daily update prices.csv"
+          git commit -m "Daily update market data"
           git push
